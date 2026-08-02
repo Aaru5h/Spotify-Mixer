@@ -92,7 +92,7 @@ export async function api<T>(session: Session, path: string, init?: RequestInit)
   }
   if (res.status === 403) {
     throw new SpotifyError(
-      "Spotify refused this request (403). If this is a new app, check the user is added under Users and Access in the dashboard.",
+      `Spotify refused ${init?.method ?? "GET"} ${path} (403): ${(await res.text()).slice(0, 200)} — if this is a new app, check the user is added under Users and Access in the dashboard.`,
       403
     );
   }
@@ -253,7 +253,8 @@ export async function createPlaylist(
   );
 
   for (let i = 0; i < input.uris.length; i += 100) {
-    await api(session, `/playlists/${playlist.id}/tracks`, {
+    // /tracks is deprecated and hard-403s for apps created after Nov 2024 — /items is the replacement.
+    await api(session, `/playlists/${playlist.id}/items`, {
       method: "POST",
       body: JSON.stringify({ uris: input.uris.slice(i, i + 100) }),
     });
