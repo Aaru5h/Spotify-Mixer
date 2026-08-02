@@ -153,6 +153,9 @@ export default function Mixer({ initialError }: { initialError?: string }) {
       });
       setSavedUrl(result.url);
       setStage("done");
+      // ponytail: new tab, same tab if the popup blocker eats it. The done screen
+      // keeps the link either way, and sessionStorage restores the flow on back.
+      if (!window.open(result.url, "_blank", "noopener")) window.location.href = result.url;
     });
 
   const restart = () => {
