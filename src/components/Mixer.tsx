@@ -24,6 +24,21 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return json as T;
 }
 
+/** Hand off to the installed Spotify app, falling back to the web player.
+ *  There is no way to ask the browser whether a scheme has a handler, so: fire the
+ *  deep link, and if we still have focus a moment later assume nothing caught it.
+ *  ponytail: the standard trick, and the only one that works without a native shim. */
+function openInSpotify(url: string) {
+  const id = url.split("/").pop()?.split("?")[0];
+  if (!id) return void window.open(url, "_blank", "noopener");
+
+  const web = setTimeout(() => {
+    if (!document.hidden) window.open(url, "_blank", "noopener");
+  }, 1200);
+  window.addEventListener("blur", () => clearTimeout(web), { once: true });
+  window.location.href = `spotify:playlist:${id}`;
+}
+
 export default function Mixer({ initialError }: { initialError?: string }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [genres, setGenres] = useState<string[]>([]);
@@ -153,9 +168,7 @@ export default function Mixer({ initialError }: { initialError?: string }) {
       });
       setSavedUrl(result.url);
       setStage("done");
-      // ponytail: new tab, same tab if the popup blocker eats it. The done screen
-      // keeps the link either way, and sessionStorage restores the flow on back.
-      if (!window.open(result.url, "_blank", "noopener")) window.location.href = result.url;
+      openInSpotify(result.url);
     });
 
   const restart = () => {
@@ -379,7 +392,15 @@ export default function Mixer({ initialError }: { initialError?: string }) {
               <h1 className="display mt-4 text-5xl sm:text-6xl">{playlist.name}</h1>
               <p className="mt-5 max-w-prose leading-relaxed text-muted">{playlist.description}</p>
               <div className="mt-9 flex flex-wrap gap-3">
-                <a href={savedUrl} target="_blank" rel="noreferrer">
+                <a
+                  href={savedUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openInSpotify(savedUrl);
+                  }}
+                >
                   <Button>Open in Spotify</Button>
                 </a>
                 <Button variant="quiet" onClick={restart}>
