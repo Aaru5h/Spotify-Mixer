@@ -43,13 +43,13 @@ export async function groqJSON<T extends z.ZodType>(opts: {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new GroqError("GROQ_API_KEY is not set. Copy .env.example to .env.local.");
 
-  const res = await fetch(ENDPOINT, {
+  const send = () => fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: MODEL,
       temperature: opts.temperature ?? 0.7,
-      max_completion_tokens: opts.maxTokens ?? 8000,
+      max_completion_tokens: opts.maxTokens ?? 1500,
       messages: [
         { role: "system", content: opts.system },
         { role: "user", content: opts.user },
@@ -65,12 +65,25 @@ export async function groqJSON<T extends z.ZodType>(opts: {
     }),
   });
 
+  // A session spends four calls, which overruns the free tier's 8k tokens-per-minute.
+  // One wait usually clears it; longer than 20s means the budget is genuinely gone.
+  let res = await send();
+  if (res.status === 429) {
+    const wait = Number(res.headers.get("retry-after") ?? 5);
+    if (wait > 20) throw new GroqError(`Groq rate limit: retry in ${Math.ceil(wait)}s.`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await send();
+  }
+
   if (!res.ok) {
     const body = await res.text();
     throw new GroqError(`Groq ${res.status}: ${body.slice(0, 400)}`);
   }
 
   const json = await res.json();
+  // Truncation otherwise surfaces as "malformed JSON" below and sends you hunting a schema bug.
+  if (json?.choices?.[0]?.finish_reason === "length")
+    throw new GroqError(`Response hit max_completion_tokens (${opts.maxTokens ?? 1500}). Raise it or ask for less.`);
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new GroqError("Groq returned no content.");
 

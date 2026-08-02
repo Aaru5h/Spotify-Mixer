@@ -64,7 +64,9 @@ export async function POST(req: Request) {
         system: CURATE_SYSTEM,
         user: curateUser({ profile, taste, topArtists, recentArtists, exclude: rejected, ask }),
         temperature: round === 0 ? 0.8 : 0.95, // widen the net on the top-up
-        maxTokens: 16000,
+        // ~70 tokens per candidate plus the name/description/arc. Ceiling is the free-tier
+        // 8k TPM minus the prompt; if the tier changes, this is the number to raise.
+        maxTokens: Math.min(400 + ask * 70, 6000),
       });
 
       meta ??= curation;

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       system: ASSESS_SYSTEM,
       user: assessUser({ ...body.data, topArtists }),
       temperature: 0.5, // this is a reading, not a creative act
-      maxTokens: 3000,
+      maxTokens: 1500,
     });
 
     await session.save();
