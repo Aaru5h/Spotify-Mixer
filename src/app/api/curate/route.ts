@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         temperature: round === 0 ? 0.8 : 0.95, // widen the net on the top-up
         // ~70 tokens per candidate plus the name/description/arc. Ceiling is the free-tier
         // 8k TPM minus the prompt; if the tier changes, this is the number to raise.
-        maxTokens: Math.min(400 + ask * 70, 6000),
+        maxTokens: Math.min(1200 + ask * 70, 6000),
       });
 
       meta ??= curation;

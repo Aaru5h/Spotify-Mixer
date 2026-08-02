@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       system: PROBE_SYSTEM,
       user: probeUser({ note: body.data.note, ...taste }),
       temperature: 0.75,
-      maxTokens: 1500,
+      maxTokens: 2000, // headroom for reasoning tokens
     });
 
     await session.save();

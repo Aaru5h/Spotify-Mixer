@@ -50,6 +50,11 @@ export async function groqJSON<T extends z.ZodType>(opts: {
       model: MODEL,
       temperature: opts.temperature ?? 0.7,
       max_completion_tokens: opts.maxTokens ?? 1500,
+      // Reasoning tokens are spent out of max_completion_tokens. At the default effort
+      // gpt-oss can burn the whole budget thinking and emit nothing, which comes back as
+      // a 400 json_validate_failed with an empty failed_generation. Raise to "medium" if
+      // curation quality drops — but raise the token budgets in the same move.
+      reasoning_effort: "low",
       messages: [
         { role: "system", content: opts.system },
         { role: "user", content: opts.user },
