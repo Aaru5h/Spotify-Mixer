@@ -78,6 +78,14 @@ export default function TastePanel({
         </Field>
       </div>
 
+      <Field label="Films or shows to pull from" hint="Songs from these soundtracks. Leave empty to skip.">
+        <TagInput
+          values={taste.soundtracks}
+          onChange={(v) => set("soundtracks", v)}
+          placeholder="A movie or show whose songs you want"
+        />
+      </Field>
+
       <Field label="Familiar or new">
         <Slider
           value={taste.familiarity}

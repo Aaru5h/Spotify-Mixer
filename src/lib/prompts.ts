@@ -112,6 +112,7 @@ export function assessUser(input: {
     t.languages.length && `languages: ${t.languages.join(", ")}`,
     t.eras.length && `eras: ${t.eras.join(", ")}`,
     t.mustArtists.length && `artists they named: ${t.mustArtists.join(", ")}`,
+    t.soundtracks.length && `films/shows to draw songs from: ${t.soundtracks.join(", ")}`,
     t.notes.trim() && `their own note on the music: "${t.notes.trim()}"`,
   ]
     .filter(Boolean)
@@ -190,6 +191,9 @@ export function curateUser(input: {
     t.eras.length ? `Eras: ${t.eras.join(", ")}` : "Eras: open",
     t.mustArtists.length ? `Must include: ${t.mustArtists.join(", ")}` : "",
     t.avoidArtists.length ? `Never include: ${t.avoidArtists.join(", ")}` : "",
+    t.soundtracks.length
+      ? `Draw songs from these films/shows: ${t.soundtracks.join(", ")} — use tracks actually featured in or from the soundtrack of each, only real recordings that exist on streaming`
+      : "",
     `Discovery: ${t.familiarity}/100 (0 = only what they already love, 100 = all unfamiliar)`,
     t.explicitOk ? "" : "No explicit lyrics.",
     t.notes.trim() ? `In their words: "${t.notes.trim()}"` : "",

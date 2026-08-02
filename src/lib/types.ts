@@ -86,6 +86,7 @@ export type Taste = {
   eras: string[];
   mustArtists: string[];
   avoidArtists: string[];
+  soundtracks: string[]; // films/shows to pull songs from
   familiarity: number; // 0 = only what I know, 100 = all discovery
   explicitOk: boolean;
   length: number;
@@ -98,6 +99,7 @@ export const DEFAULT_TASTE: Taste = {
   eras: [],
   mustArtists: [],
   avoidArtists: [],
+  soundtracks: [],
   familiarity: 45,
   explicitOk: true,
   length: 20,

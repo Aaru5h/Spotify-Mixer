@@ -17,6 +17,7 @@ const Body = z.object({
     eras: z.array(z.string()).max(20),
     mustArtists: z.array(z.string()).max(20),
     avoidArtists: z.array(z.string()).max(20),
+    soundtracks: z.array(z.string()).max(20),
     familiarity: z.number(),
     explicitOk: z.boolean(),
     length: z.number(),

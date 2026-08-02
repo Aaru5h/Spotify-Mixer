@@ -11,6 +11,7 @@ type Stage = "write" | "probe" | "taste" | "mood" | "tracks" | "done";
 type Playlist = { name: string; description: string; arc: string; tracks: ResolvedTrack[]; dropped: number };
 
 const STAGES: Stage[] = ["write", "probe", "taste", "mood", "tracks"];
+const SNAP_KEY = "mixer";
 
 async function post<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -42,6 +43,39 @@ export default function Mixer({ initialError }: { initialError?: string }) {
   const [error, setError] = useState(initialError ?? "");
   const rejected = useRef<string[]>([]);
   const top = useRef<HTMLDivElement>(null);
+  const hydrated = useRef(false);
+
+  // Restore the in-progress flow on reload; sessionStorage clears itself on tab close.
+  // Restore runs before persist writes anything (hydrated gate), so the snapshot isn't clobbered.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SNAP_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        setStage(s.stage ?? "write");
+        setNote(s.note ?? "");
+        setProbe(s.probe ?? null);
+        setAnswers(s.answers ?? {});
+        setTaste(s.taste ?? DEFAULT_TASTE);
+        setProfile(s.profile ?? null);
+        setPlaylist(s.playlist ?? null);
+        setIsPublic(s.isPublic ?? false);
+        setSavedUrl(s.savedUrl ?? "");
+        rejected.current = s.rejected ?? [];
+      }
+    } catch {}
+    hydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    try {
+      sessionStorage.setItem(
+        SNAP_KEY,
+        JSON.stringify({ stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl, rejected: rejected.current })
+      );
+    } catch {}
+  }, [stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl]);
 
   useEffect(() => {
     fetch("/api/me")
@@ -122,6 +156,7 @@ export default function Mixer({ initialError }: { initialError?: string }) {
     });
 
   const restart = () => {
+    try { sessionStorage.removeItem(SNAP_KEY); } catch {}
     rejected.current = [];
     setNote("");
     setProbe(null);
