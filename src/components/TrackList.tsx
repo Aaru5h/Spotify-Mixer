@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "./ui";
 import type { ResolvedTrack } from "@/lib/types";
 
@@ -16,6 +17,7 @@ export default function TrackList({
   dropped,
   isPublic,
   busy,
+  canSave,
   onName,
   onPublic,
   onRemove,
@@ -29,6 +31,8 @@ export default function TrackList({
   dropped: number;
   isPublic: boolean;
   busy: false | "regenerating" | "saving";
+  /** guests get a playlist on the shared account instead of their own */
+  canSave: boolean;
   onName: (v: string) => void;
   onPublic: (v: boolean) => void;
   onRemove: (id: string) => void;
@@ -36,6 +40,18 @@ export default function TrackList({
   onCreate: () => void;
 }) {
   const totalMs = tracks.reduce((a, t) => a + t.durationMs, 0);
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    const text = [name, "", ...tracks.map((t, i) => `${i + 1}. ${t.title} — ${t.artist}`)].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -56,9 +72,13 @@ export default function TrackList({
         </p>
       </header>
 
-      <ol className="divide-y divide-line border-y border-line">
+      {/* no dividers, just a hover wash — the way every track list reads now */}
+      <ol className="-mx-3">
         {tracks.map((t, i) => (
-          <li key={t.id} className="group flex items-start gap-4 py-3.5">
+          <li
+            key={t.id}
+            className="group flex items-start gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-raised"
+          >
             <span className="w-5 pt-1 text-right text-xs tabular-nums text-faint">{i + 1}</span>
             {t.art ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -90,6 +110,7 @@ export default function TrackList({
         ))}
       </ol>
 
+      {canSave && (
       <label className="flex cursor-pointer items-center gap-2.5 text-sm text-muted">
         <input
           type="checkbox"
@@ -99,15 +120,34 @@ export default function TrackList({
         />
         Make it public on my profile
       </label>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Button onClick={onCreate} disabled={!!busy || !tracks.length}>
-          {busy === "saving" ? "Saving to Spotify" : "Save to Spotify"}
+          {busy === "saving"
+            ? canSave ? "Saving to Spotify" : "Building it"
+            : canSave ? "Save to Spotify" : "Open it in Spotify"}
         </Button>
         <Button variant="quiet" onClick={onRegenerate} disabled={!!busy}>
           {busy === "regenerating" ? "Rebuilding" : "Different tracks"}
         </Button>
+        {!canSave && (
+          <Button variant="quiet" onClick={copy} disabled={!tracks.length}>
+            {copied ? "Copied" : "Copy the list"}
+          </Button>
+        )}
       </div>
+
+      {!canSave && (
+        <p className="text-sm leading-relaxed text-faint">
+          You&rsquo;ll get a real Spotify playlist to open and play &mdash; tap the heart in
+          Spotify to keep it.{" "}
+          <a href="/api/auth/login" className="text-accent underline underline-offset-4">
+            Connect Spotify
+          </a>{" "}
+          to have it saved into your own account instead.
+        </p>
+      )}
     </div>
   );
 }

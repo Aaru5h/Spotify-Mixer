@@ -43,13 +43,14 @@ export async function groqJSON<T extends z.ZodType>(opts: {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new GroqError("GROQ_API_KEY is not set. Copy .env.example to .env.local.");
 
-  const send = () => fetch(ENDPOINT, {
+  const budget = opts.maxTokens ?? 1500;
+  const send = (maxTokens: number) => fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: MODEL,
       temperature: opts.temperature ?? 0.7,
-      max_completion_tokens: opts.maxTokens ?? 1500,
+      max_completion_tokens: maxTokens,
       // Reasoning tokens are spent out of max_completion_tokens. At the default effort
       // gpt-oss can burn the whole budget thinking and emit nothing, which comes back as
       // a 400 json_validate_failed with an empty failed_generation. Raise to "medium" if
@@ -70,25 +71,39 @@ export async function groqJSON<T extends z.ZodType>(opts: {
     }),
   });
 
-  // A session spends four calls, which overruns the free tier's 8k tokens-per-minute.
-  // One wait usually clears it; longer than 20s means the budget is genuinely gone.
-  let res = await send();
-  if (res.status === 429) {
-    const wait = Number(res.headers.get("retry-after") ?? 5);
-    if (wait > 20) throw new GroqError(`Groq rate limit: retry in ${Math.ceil(wait)}s.`);
-    await new Promise((r) => setTimeout(r, wait * 1000));
-    res = await send();
+  // Two things go wrong on the free tier, and both are transient:
+  //   429            — a session's calls overrun the 8k tokens-per-minute budget.
+  //   400 json_validate_failed — the generation was cut off mid-JSON, so strict decoding
+  //                    never closed the object. Groq reports this instead of
+  //                    finish_reason: "length", which is why the check below rarely fires.
+  // Retry each once: the 429 after the window Groq names, the truncation with more room.
+  let tokens = budget;
+  let res = await send(tokens);
+  for (let retries = 0; retries < 2 && !res.ok; retries++) {
+    if (res.status === 429) {
+      const wait = Math.min(Number(res.headers.get("retry-after") ?? 5), 30);
+      await new Promise((r) => setTimeout(r, (wait + 1) * 1000));
+    } else if (res.status === 400 && (await res.clone().text()).includes("json_validate_failed")) {
+      tokens = Math.min(Math.ceil(tokens * 1.6), 8000);
+    } else {
+      break;
+    }
+    res = await send(tokens);
   }
 
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 429)
+      throw new GroqError("The model is rate limited right now. Wait a minute and try again.");
+    if (body.includes("json_validate_failed"))
+      throw new GroqError("The model ran out of room mid-answer. Try again, or ask for a shorter playlist.");
     throw new GroqError(`Groq ${res.status}: ${body.slice(0, 400)}`);
   }
 
   const json = await res.json();
   // Truncation otherwise surfaces as "malformed JSON" below and sends you hunting a schema bug.
   if (json?.choices?.[0]?.finish_reason === "length")
-    throw new GroqError(`Response hit max_completion_tokens (${opts.maxTokens ?? 1500}). Raise it or ask for less.`);
+    throw new GroqError(`Response hit max_completion_tokens (${tokens}). Raise it or ask for less.`);
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new GroqError("Groq returned no content.");
 

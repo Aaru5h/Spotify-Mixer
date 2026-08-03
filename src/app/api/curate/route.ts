@@ -8,6 +8,7 @@ import { Curation, MoodProfile } from "@/lib/types";
 import { dedupeKey } from "@/lib/resolve";
 import type { ResolvedTrack } from "@/lib/types";
 import { fail } from "@/lib/http";
+import { rateLimit } from "@/lib/limit";
 
 const Body = z.object({
   profile: MoodProfile,
@@ -27,8 +28,14 @@ const Body = z.object({
   exclude: z.array(z.string()).max(200).default([]),
 });
 
+// Three model rounds, each of which may sit out a rate-limit window, plus the searches.
+export const maxDuration = 120;
+
 export async function POST(req: Request) {
   try {
+    const limited = rateLimit(req);
+    if (limited) return limited;
+
     const parsed = Body.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: "Missing mood profile." }, { status: 400 });
 
@@ -36,14 +43,13 @@ export async function POST(req: Request) {
     const taste = { ...parsed.data.taste, length: Math.min(Math.max(parsed.data.taste.length, 8), 50) };
 
     const session = await getSession();
-    if (!session.accessToken) {
-      return NextResponse.json({ error: "Connect Spotify first." }, { status: 401 });
-    }
+    // Guests get null: resolution falls back to the app token, which no user cap applies
+    // to. They just lose the listening-history calibration, since that needs /me.
+    const user = session.accessToken ? session : null;
     const market = session.market ?? "US";
-    const { topArtists, recentArtists } = await getTaste(session).catch(() => ({
-      topArtists: [] as string[],
-      recentArtists: [] as string[],
-    }));
+    const { topArtists, recentArtists } = user
+      ? await getTaste(user).catch(() => ({ topArtists: [] as string[], recentArtists: [] as string[] }))
+      : { topArtists: [] as string[], recentArtists: [] as string[] };
 
     const kept: ResolvedTrack[] = [];
     const seen = new Set<string>();
@@ -52,27 +58,34 @@ export async function POST(req: Request) {
       null;
     let dropped = 0;
 
-    // Search resolution always loses a few candidates. Over-ask, then top up
-    // once if we still came up short — two rounds is plenty in practice.
-    for (let round = 0; round < 2 && kept.length < taste.length; round++) {
+    // Search resolution always loses a few candidates. Over-ask, then top up if we came
+    // up short. Asking for the whole playlist in one call is what truncated the JSON and
+    // blew the free tier's per-minute budget — keep each call small, take more rounds.
+    for (let round = 0; round < 3 && kept.length < taste.length; round++) {
       const shortfall = taste.length - kept.length;
-      const ask = Math.min(round === 0 ? Math.ceil(shortfall * 1.7) + 5 : shortfall * 2 + 4, 70);
+      const ask = Math.min(Math.ceil(shortfall * 1.7) + 4, 24);
 
-      const curation = await groqJSON({
-        schema: Curation,
-        name: "curation",
-        system: CURATE_SYSTEM,
-        user: curateUser({ profile, taste, topArtists, recentArtists, exclude: rejected, ask }),
-        temperature: round === 0 ? 0.8 : 0.95, // widen the net on the top-up
-        // ~70 tokens per candidate plus the name/description/arc. Ceiling is the free-tier
-        // 8k TPM minus the prompt; if the tier changes, this is the number to raise.
-        maxTokens: Math.min(1200 + ask * 70, 6000),
-      });
+      let curation;
+      try {
+        curation = await groqJSON({
+          schema: Curation,
+          name: "curation",
+          system: CURATE_SYSTEM,
+          user: curateUser({ profile, taste, topArtists, recentArtists, exclude: rejected, ask }),
+          temperature: round === 0 ? 0.8 : 0.95, // widen the net on the top-up
+          // ~90 tokens per candidate (reasoning is spent from the same budget) plus the
+          // name/description/arc. Raise alongside the per-round cap above if the tier changes.
+          maxTokens: 900 + ask * 90,
+        });
+      } catch (e) {
+        if (kept.length) break; // a short playlist beats an error page
+        throw e;
+      }
 
       meta ??= curation;
       for (const c of curation.tracks) rejected.push(`${c.artist} — ${c.title}`);
 
-      const res = await resolveTracks(session, curation.tracks, market, {
+      const res = await resolveTracks(user, curation.tracks, market, {
         limit: taste.length - kept.length,
         excludeKeys: seen,
       });
@@ -84,7 +97,7 @@ export async function POST(req: Request) {
       }
     }
 
-    await session.save();
+    if (user) await session.save();
 
     if (!kept.length) {
       return NextResponse.json(

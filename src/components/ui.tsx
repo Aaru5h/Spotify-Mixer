@@ -18,11 +18,12 @@ export function Button({
   full?: boolean;
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[0.95rem] font-medium transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none";
+    "inline-flex items-center justify-center gap-2 rounded-full px-7 py-3 text-[0.95rem] font-bold tracking-tight transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none";
   const styles = {
-    solid: "bg-accent text-accent-ink hover:brightness-110 active:scale-[0.98] shadow-sm",
-    quiet: "border border-line bg-surface text-ink hover:bg-raised active:scale-[0.98]",
-    ghost: "text-muted hover:text-ink px-3",
+    // the streaming-app button: pill, heavy, grows slightly under the cursor
+    solid: "bg-accent text-accent-ink hover:scale-[1.04] active:scale-[0.99] shadow-sm",
+    quiet: "border border-line bg-surface text-ink hover:scale-[1.04] hover:bg-raised active:scale-[0.99]",
+    ghost: "text-muted hover:text-ink px-3 font-semibold",
   }[variant];
 
   return (
@@ -213,7 +214,7 @@ export function ThemeToggle() {
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
       className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-muted transition-colors hover:text-ink"
     >
-      {theme === "dark" ? "Dim room" : "Paper"}
+      {theme === "dark" ? "Light" : "Dark"}
     </button>
   );
 }

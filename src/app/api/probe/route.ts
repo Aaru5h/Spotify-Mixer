@@ -6,11 +6,15 @@ import { groqJSON } from "@/lib/groq";
 import { PROBE_SYSTEM, probeUser } from "@/lib/prompts";
 import { ProbeResult } from "@/lib/types";
 import { fail } from "@/lib/http";
+import { rateLimit } from "@/lib/limit";
 
 const Body = z.object({ note: z.string().min(1).max(4000) });
 
 export async function POST(req: Request) {
   try {
+    const limited = rateLimit(req);
+    if (limited) return limited;
+
     const body = Body.safeParse(await req.json());
     if (!body.success) {
       return NextResponse.json({ error: "Write a little about how you're doing first." }, { status: 400 });

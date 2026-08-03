@@ -6,6 +6,7 @@ import { groqJSON, clamp } from "@/lib/groq";
 import { ASSESS_SYSTEM, assessUser } from "@/lib/prompts";
 import { MoodProfile, ProbeQuestion } from "@/lib/types";
 import { fail } from "@/lib/http";
+import { rateLimit } from "@/lib/limit";
 
 const TasteBody = z.object({
   genres: z.array(z.string()).max(20),
@@ -29,6 +30,9 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   try {
+    const limited = rateLimit(req);
+    if (limited) return limited;
+
     const body = Body.safeParse(await req.json());
     if (!body.success) return NextResponse.json({ error: "Incomplete answers." }, { status: 400 });
 

@@ -41,6 +41,8 @@ function openInSpotify(url: string) {
 
 export default function Mixer({ initialError }: { initialError?: string }) {
   const [connected, setConnected] = useState<boolean | null>(null);
+  /** Chose to run without connecting. The flow works either way; only saving needs auth. */
+  const [guest, setGuest] = useState(false);
   const [genres, setGenres] = useState<string[]>([]);
   const [displayName, setDisplayName] = useState("you");
 
@@ -76,6 +78,7 @@ export default function Mixer({ initialError }: { initialError?: string }) {
         setPlaylist(s.playlist ?? null);
         setIsPublic(s.isPublic ?? false);
         setSavedUrl(s.savedUrl ?? "");
+        setGuest(s.guest ?? false);
         rejected.current = s.rejected ?? [];
       }
     } catch {}
@@ -87,10 +90,10 @@ export default function Mixer({ initialError }: { initialError?: string }) {
     try {
       sessionStorage.setItem(
         SNAP_KEY,
-        JSON.stringify({ stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl, rejected: rejected.current })
+        JSON.stringify({ stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl, guest, rejected: rejected.current })
       );
     } catch {}
-  }, [stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl]);
+  }, [stage, note, probe, answers, taste, profile, playlist, isPublic, savedUrl, guest]);
 
   useEffect(() => {
     fetch("/api/me")
@@ -188,7 +191,7 @@ export default function Mixer({ initialError }: { initialError?: string }) {
     return <Shell><Spinner label="One moment" /></Shell>;
   }
 
-  if (!connected) {
+  if (!connected && !guest) {
     return (
       <Shell>
         <div className="rise flex min-h-[70vh] flex-col justify-center">
@@ -200,16 +203,21 @@ export default function Mixer({ initialError }: { initialError?: string }) {
           </h1>
           <p className="mt-6 max-w-md leading-relaxed text-muted">
             Write a little about your day. It asks a few questions, tells you what it thinks
-            you&rsquo;re feeling, lets you correct it, then builds the playlist in your Spotify.
+            you&rsquo;re feeling, lets you correct it, then picks the music.
           </p>
           {error && <div className="mt-6 max-w-md"><ErrorNote>{error}</ErrorNote></div>}
-          <div className="mt-9">
+          <div className="mt-9 flex flex-wrap items-center gap-3">
             <a href="/api/auth/login">
               <Button>Connect Spotify</Button>
             </a>
+            <Button variant="ghost" onClick={() => setGuest(true)}>
+              Just build me a playlist
+            </Button>
           </div>
-          <p className="mt-4 text-xs text-faint">
-            It reads your top artists to calibrate taste, and can create playlists. Nothing else.
+          <p className="mt-4 max-w-md text-xs leading-relaxed text-faint">
+            Connecting reads your top artists to calibrate taste and lets it save the playlist
+            straight to your account. Without it you still get the full playlist &mdash; every
+            track checked against Spotify &mdash; as a list you can open or copy.
           </p>
         </div>
       </Shell>
@@ -367,6 +375,7 @@ export default function Mixer({ initialError }: { initialError?: string }) {
               <TrackList
                 {...playlist}
                 isPublic={isPublic}
+                canSave={!!connected}
                 busy={busy === "regenerating" ? "regenerating" : busy === "saving" ? "saving" : false}
                 onName={(name) => setPlaylist({ ...playlist, name })}
                 onPublic={setIsPublic}
@@ -388,9 +397,17 @@ export default function Mixer({ initialError }: { initialError?: string }) {
 
           {stage === "done" && playlist && (
             <section className="rise flex min-h-[60vh] flex-col justify-center">
-              <p className="text-xs uppercase tracking-[0.18em] text-faint">Saved to Spotify</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-faint">
+                {connected ? "Saved to Spotify" : "Ready in Spotify"}
+              </p>
               <h1 className="display mt-4 text-5xl sm:text-6xl">{playlist.name}</h1>
               <p className="mt-5 max-w-prose leading-relaxed text-muted">{playlist.description}</p>
+              {!connected && (
+                <p className="mt-4 max-w-prose text-sm leading-relaxed text-faint">
+                  It lives on the Mood Mixer account, so open it and tap the heart to keep a copy
+                  in your own library.
+                </p>
+              )}
               <div className="mt-9 flex flex-wrap gap-3">
                 <a
                   href={savedUrl}

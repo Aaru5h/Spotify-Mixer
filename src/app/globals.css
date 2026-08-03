@@ -7,34 +7,34 @@
    --------------------------------------------------------------- */
 
 :root {
-  --bg: #faf7f2;
-  --surface: #fffdf9;
-  --raised: #f4eee5;
-  --ink: #241f1b;
-  --muted: #6e6459;
-  --faint: #9a8f82;
-  --line: #e3dbd0;
-  --accent: #b4552f;
-  --accent-ink: #fffdf9;
-  --accent-soft: #f2e3d9;
-  --grain: 0.035;
-  --shadow: 0 1px 2px rgb(36 31 27 / 0.04), 0 8px 24px -12px rgb(36 31 27 / 0.12);
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --raised: #f1f1f1;
+  --ink: #121212;
+  --muted: #585858;
+  --faint: #868686;
+  --line: #e4e4e4;
+  /* Spotify green sits at 2.2:1 on white, so light mode darkens it for text and
+     pairs it with white ink. Dark mode uses the real #1DB954 on black, as intended. */
+  --accent: #0e7a3c;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6f4ec;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px -12px rgb(0 0 0 / 0.18);
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --bg: #16130f;
-  --surface: #1e1a15;
-  --raised: #262019;
-  --ink: #efe7da;
-  --muted: #a19585;
-  --faint: #7b7062;
-  --line: #322b23;
-  --accent: #e0a34a;
-  --accent-ink: #1a1611;
-  --accent-soft: #2b2118;
-  --grain: 0.05;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -14px rgb(0 0 0 / 0.6);
+  --bg: #121212;
+  --surface: #181818;
+  --raised: #242424;
+  --ink: #ffffff;
+  --muted: #b3b3b3;
+  --faint: #8a8a8a;
+  --line: #2a2a2a;
+  --accent: #1db954;
+  --accent-ink: #000000;
+  --accent-soft: #17311f;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -14px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
 
@@ -49,8 +49,8 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
-  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
-  --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -70,23 +70,12 @@ body {
   transition: background-color 0.5s ease, color 0.5s ease;
 }
 
-/* Paper tooth. Very low opacity — it should register as warmth, not texture. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: var(--grain);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
+/* Heavy, tightly-tracked grotesque — the house style of every streaming UI. */
 .display {
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
-  font-variation-settings: "SOFT" 30, "WONK" 1;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
 }
 
 /* Consistent focus ring everywhere, including custom controls. */

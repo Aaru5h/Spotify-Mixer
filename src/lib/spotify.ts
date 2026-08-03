@@ -64,25 +64,55 @@ async function refresh(session: Session) {
   if (json.refresh_token) session.refreshToken = json.refresh_token;
 }
 
+/** Client-credentials token. Not tied to any user, so it is exempt from the
+ *  development-mode user cap — which is what lets guests resolve tracks without
+ *  connecting. It can only read the catalogue; anything under /me needs a session.
+ *  ponytail: module-level cache, per serverless instance. Good enough — the token
+ *  lasts an hour and minting a spare one costs one request. */
+let appToken: { value: string; expiresAt: number } | null = null;
+
+async function getAppToken() {
+  if (appToken && appToken.expiresAt - 60_000 > Date.now()) return appToken.value;
+  const { basic } = creds();
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${basic}` },
+    body: new URLSearchParams({ grant_type: "client_credentials" }),
+  });
+  if (!res.ok) throw new SpotifyError("Could not reach Spotify's catalogue right now.", 502);
+  const json = (await res.json()) as { access_token: string; expires_in: number };
+  appToken = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+  return appToken.value;
+}
+
 /** Authenticated call. Refreshes ahead of expiry and once more on a 401.
- *  Mutates `session` — the caller must `.save()` afterwards. */
-export async function api<T>(session: Session, path: string, init?: RequestInit): Promise<T> {
-  if (!session.accessToken) throw new SpotifyError("Not connected to Spotify.", 401);
-  if (!session.expiresAt || session.expiresAt - 60_000 < Date.now()) await refresh(session);
+ *  Mutates `session` — the caller must `.save()` afterwards.
+ *  Pass `null` for a guest: catalogue-only calls go out on the app token instead. */
+export async function api<T>(session: Session | null, path: string, init?: RequestInit): Promise<T> {
+  // A refresh token alone is enough — that is how the owner session below bootstraps.
+  if (session && !session.accessToken && !session.refreshToken)
+    throw new SpotifyError("Not connected to Spotify.", 401);
+  if (session && (!session.accessToken || !session.expiresAt || session.expiresAt - 60_000 < Date.now()))
+    await refresh(session);
+
+  const token = async () => (session ? session.accessToken : await getAppToken());
+  let bearer = await token();
 
   const send = () =>
     fetch(`${API}${path}`, {
       ...init,
       headers: {
         ...init?.headers,
-        authorization: `Bearer ${session.accessToken}`,
+        authorization: `Bearer ${bearer}`,
         "content-type": "application/json",
       },
     });
 
   let res = await send();
   if (res.status === 401) {
-    await refresh(session);
+    if (session) await refresh(session);
+    else appToken = null; // expired early; mint a fresh one
+    bearer = await token();
     res = await send();
   }
   if (res.status === 429) {
@@ -91,8 +121,16 @@ export async function api<T>(session: Session, path: string, init?: RequestInit)
     res = await send();
   }
   if (res.status === 403) {
+    const body = (await res.text()).slice(0, 200);
+    // The app is in Spotify's development mode, so only accounts listed under
+    // Users and Access can use it. Everyone else gets this on their very first call.
+    if (body.includes("not registered"))
+      throw new SpotifyError(
+        "This app is still in Spotify's development mode, so only invited accounts can use it. Ask whoever sent you the link to add the email on your Spotify account under Users and Access.",
+        403
+      );
     throw new SpotifyError(
-      `Spotify refused ${init?.method ?? "GET"} ${path} (403): ${(await res.text()).slice(0, 200)} — if this is a new app, check the user is added under Users and Access in the dashboard.`,
+      `Spotify refused ${init?.method ?? "GET"} ${path} (403): ${body}`,
       403
     );
   }
@@ -116,6 +154,30 @@ type SpotifyTrack = {
 
 export async function getProfile(session: Session) {
   return api<{ id: string; display_name: string | null; country: string | null }>(session, "/me");
+}
+
+/** The deployment owner's own session, rebuilt from a refresh token in env.
+ *  Playlist creation needs *an* authenticated user — not necessarily the visitor — so
+ *  guests get a real, openable playlist link written to this account instead of a
+ *  tracklist they have to reassemble by hand. Kept in module scope so the access token
+ *  is refreshed once per instance rather than once per guest. */
+let owner: Session | null = null;
+
+export async function ownerSession(): Promise<Session> {
+  const refreshToken = process.env.OWNER_REFRESH_TOKEN;
+  if (!refreshToken)
+    throw new SpotifyError(
+      "Playlists for guests aren't set up on this deployment — use “Copy the list” instead, or connect Spotify.",
+      501
+    );
+
+  if (!owner || owner.refreshToken !== refreshToken) owner = { refreshToken };
+  if (!owner.userId) {
+    const me = await getProfile(owner); // also mints the first access token
+    owner.userId = me.id;
+    owner.market = me.country ?? "US";
+  }
+  return owner;
 }
 
 /** Taste signal. Medium term is the best default: recent enough to be current,
@@ -157,7 +219,7 @@ function toResolved(t: SpotifyTrack, reason: string): ResolvedTrack | null {
 }
 
 async function searchOne(
-  session: Session,
+  session: Session | null,
   c: CandidateTrack,
   market: string
 ): Promise<ResolvedTrack | null> {
@@ -192,7 +254,7 @@ async function searchOne(
 /** Resolve candidates against Spotify, dropping anything that doesn't verifiably
  *  exist. Order is preserved because the LLM already sequenced them. */
 export async function resolveTracks(
-  session: Session,
+  session: Session | null,
   candidates: CandidateTrack[],
   market: string,
   opts: { limit: number; excludeKeys?: Set<string> }
